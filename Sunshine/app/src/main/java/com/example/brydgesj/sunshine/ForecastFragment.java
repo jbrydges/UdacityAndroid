@@ -1,8 +1,14 @@
 package com.example.brydgesj.sunshine;
 
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.res.Resources;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.Preference;
+import android.preference.PreferenceManager;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -11,8 +17,10 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -37,17 +45,6 @@ public class ForecastFragment extends Fragment {
     public ForecastFragment() {
     }
 
-    String[] forecastArray = {
-            "Today - Sunny - 88/33",
-            "Tomorrow - Cloudy - 70/25",
-            "Wed - Sunny - 88/33",
-            "Thurs - Sunny - 85/35",
-            "Fri - Cloudy - 90/40",
-            "Sat - Sunny - 88/33",
-            "Sun - Sunny - 89/31"
-    };
-
-    List<String> weekForecast = new ArrayList<String>(Arrays.asList(forecastArray));
     public ArrayAdapter<String> mForecastAdapter;
 
     @Override
@@ -68,11 +65,22 @@ public class ForecastFragment extends Fragment {
                 getActivity(),
                 R.layout.list_item_forecast,
                 R.id.list_item_forecast_textview,
-                weekForecast);
+                new ArrayList<String>() );
 
         // Find the ListView and set the adapter to the one we just created.
         ListView listView = (ListView) rootView.findViewById(R.id.listview_forecast);
         listView.setAdapter(mForecastAdapter);
+
+        // Launch the details activity when list item clicked
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int position, long l) {
+                String forecast = mForecastAdapter.getItem(position);
+                Intent forecastDetailIntent = new Intent(getActivity(), DetailActivity.class)
+                        .putExtra(Intent.EXTRA_TEXT, forecast);
+                startActivity(forecastDetailIntent);
+            }
+        });
 
         return rootView;
     }
@@ -87,13 +95,28 @@ public class ForecastFragment extends Fragment {
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle action bar item clicks here
         int id = item.getItemId();
-        if(id == R.id.action_refresh){
-            FetchWeatherTask weatherTask = new FetchWeatherTask();
-            weatherTask.execute("94043");
+        if (id == R.id.action_refresh) {
+            updateWeather();
             return true;
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        updateWeather();
+    }
+
+    // Gets the latest weather
+    private void updateWeather() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String location = prefs.getString(getString(R.string.pref_location_key),
+                getString(R.string.pref_location_default));
+
+        FetchWeatherTask weatherTask = new FetchWeatherTask();
+        weatherTask.execute(location);
     }
 
     //
@@ -218,6 +241,19 @@ public class ForecastFragment extends Fragment {
          * Prepare the weather high/lows for presentation.
          */
         private String formatHighLows(double high, double low) {
+            // Get the preferences to check what type of units
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getActivity());
+            String units = prefs.getString(getString(R.string.pref_units_key),
+                    getString(R.string.pref_units_default));
+            Resources res = getResources();
+            String[] unitValues = res.getStringArray(R.array.pref_units_listValues);
+
+            // Convert to fahrenheit
+            if(units.equals(unitValues[1])){
+                high = high * 1.8000 + 32.00;
+                low = low * 1.8000 + 32.00;
+            }
+
             // For presentation, assume the user doesn't care about tenths of a degree.
             long roundedHigh = Math.round(high);
             long roundedLow = Math.round(low);
